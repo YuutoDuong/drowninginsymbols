@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <title>drowninginsymbols · checks</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main>
+    <h1>Checks</h1>
+    <p class="muted">Checks the database and the parser. Run after editing data.js.</p>
+    <pre id="out" class="card">running…</pre>
+  </main>
+  <script src="data.js"></script>
+  <script src="app.js"></script>
+  <script>
+    const fails = [];
+    const ok = (cond, msg) => { if (!cond) fails.push(msg); };
+    const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+    const KINDS = ['quantity', 'constant', 'unit', 'label', 'operator'];
+
+    // --- the database ---
+    const ids = new Set();
+    for (const m of DB.meanings) {
+      ok(!ids.has(m.id), `duplicate meaning id ${m.id}`);
+      ids.add(m.id);
+      ok(DB.topics[m.topic], `${m.id}: unknown topic ${m.topic}`);
+      ok(KINDS.includes(m.kind), `${m.id}: unknown kind ${m.kind}`);
+      ok(Array.isArray(m.cur) && m.cur.length && m.cur.every(c => DB.cur[c]), `${m.id}: bad cur ${m.cur}`);
+      ok(m.name && m.note && m.q, `${m.id}: needs name, note and q`);
+      if (m.kind !== 'unit') {
+        for (const spelling of [m.sym, ...(m.alias || [])]) {
+          const t = tokenize(normalize(spelling).s);
+          ok(t.length === 1 && t[0].v === m.sym, `${m.id}: "${spelling}" reads as [${t.map(x => x.v).join(' ')}], not ${m.sym}`);
+        }
+      }
+    }
+    const fids = new Set();
+    for (const f of DB.formulas) {
+      ok(!fids.has(f.id), `duplicate formula id ${f.id}`);
+      fids.add(f.id);
+      ok(DB.topics[f.topic] && f.law && f.name, `${f.id}: needs topic, law and name`);
+      ok(same(symsOf(f.f).sort(), Object.keys(f.vars).sort()), `${f.id}: "${f.f}" has symbols [${symsOf(f.f).join(' ')}], vars has [${Object.keys(f.vars).join(' ')}]`);
+      for (const [k, id] of Object.entries(f.vars)) {
+        ok(ids.has(id), `${f.id}: vars.${k} points to missing meaning ${id}`);
+        if (ids.has(id)) ok(byId(id).sym === k, `${f.id}: vars.${k} points to ${id}, whose symbol is ${byId(id).sym}`);
+      }
+    }
+
+    // --- the parser and the context inference ---
+    const neutral = { cur: 'any', level: 'school' };
+    const topFor = (input, sym) => { const p = parse(input); return (rank(sym, context(p, { profile: neutral }))[0] || { m: {} }).m.id; };
+    ok(normalize('rho').s === 'ρ', 'rho -> ρ');
+    ok(normalize('\\nu').s === 'ν', '\\nu -> ν');
+    ok(normalize('v₀').s === 'v_0', 'v₀ -> v_0');
+    ok(normalize('ϕ').s === 'φ', 'ϕ -> φ');
+    ok(normalize('x²').s === 'x^2', 'x² -> x^2');
+    ok(same(symsOf('pV = nRT'), ['p', 'V', 'n', 'R', 'T']), 'pV = nRT splits into p V n R T');
+    ok(same(symsOf('ΔU = A + Q'), ['Δ', 'U', 'A', 'Q']), 'ΔU = A + Q splits into Δ U A Q');
+    ok(same(symsOf('N = N_0 e^{-λt}'), ['N', 'N_0', 'e', 'λ', 't']), 'decay law splits correctly');
+    ok(render('v^2').includes('<sup>2</sup>'), 'v^2 renders a superscript');
+    ok((matchFormula(symsOf('pV=nRT')) || {}).law === 'ideal-gas', 'pV=nRT is recognised as the ideal gas law');
+    ok(topFor('pV = nRT', 'p') === 'p-pressure', 'p in pV = nRT is pressure');
+    ok(topFor('p = mv', 'p') === 'p-momentum', 'p in p = mv is momentum');
+    ok(topFor('Q = 5 C', 'Q') === 'Q-charge', 'Q = 5 C is a charge');
+    ok(topFor('Q = 500 J', 'Q') === 'Q-heat', 'Q = 500 J is heat');
+    ok(topFor('60 W', 'W') === 'W-watt', '60 W is the watt');
+    ok(parse('Q = 5 C').syms.length === 1, '"Q = 5 C" asks about Q only');
+    ok(hasWord('the moment of a force', 'moment') && !hasWord('momentum is conserved', 'moment'), 'words match whole words only');
+    ok(hasWord('công của lực f', 'công của lực') && !hasWord('vật lí', 'vật l'), 'Vietnamese whole-word matching');
+
+    const out = document.getElementById('out');
+    out.textContent = fails.length
+      ? `${fails.length} PROBLEM(S)\n\n` + fails.join('\n')
+      : `ALL CHECKS PASSED\n${DB.meanings.length} meanings, ${DB.formulas.length} formulas, ${DB.glyphs.length} glyphs`;
+    document.title = (fails.length ? 'FAIL' : 'PASS') + ' · checks';
+  </script>
+</body>
+</html>

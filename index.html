@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>drowninginsymbols</title>
+  <meta name="description" content="Work out what a physics symbol or formula means in your topic and your textbook.">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <a class="logo" href="#/">drowninginsymbols<span class="caret">_</span></a>
+    <nav>
+      <a href="#/">Look up</a>
+      <a href="#/table">Symbol table</a>
+      <a href="#/history">History</a>
+      <a href="#/profile">Profile</a>
+    </nav>
+    <button type="button" id="theme" class="icon" aria-label="Switch between black and white">◐</button>
+  </header>
+
+  <main>
+    <section id="page-lookup">
+      <div id="setup"></div>
+      <form id="ask" autocomplete="off">
+        <label class="lbl" for="q"><span class="n">02</span>What are you stuck on?</label>
+        <div class="ask-row">
+          <input id="q" spellcheck="false" placeholder="p    ρ    pV = nRT    Q = 5 C">
+          <button class="btn primary" type="submit">Look up</button>
+        </div>
+        <p class="muted small">Type or paste one symbol or a whole formula. Greek names work too: rho, nu, phi. Use _ for a subscript (v_0) and ^ for a power (v^2).</p>
+      </form>
+      <details>
+        <summary>Symbol keyboard</summary>
+        <div id="keys" class="keys"></div>
+      </details>
+      <details id="shape">
+        <summary>Describe the shape</summary>
+        <div id="shapes" class="row"></div>
+      </details>
+      <div id="flow"></div>
+    </section>
+
+    <section id="page-table" hidden>
+      <h1>Symbol table</h1>
+      <p class="muted">Grouped by what they look like. Click one to look it up.</p>
+      <div id="table"></div>
+    </section>
+
+    <section id="page-history" hidden>
+      <h1>History</h1>
+      <div id="hist"></div>
+      <h2 class="sub">Reported: missing from the database</h2>
+      <p class="muted small">Stored only in this browser. Copy it to add the missing entries to data.js.</p>
+      <p class="row"><button type="button" class="btn" id="copyq">Copy as JSON</button><button type="button" class="btn" id="clearh">Clear history</button></p>
+      <div id="queue"></div>
+    </section>
+
+    <section id="page-profile" hidden>
+      <h1>Profile</h1>
+      <p class="muted">Symbols depend on where you learned physics. Saved in this browser only.</p>
+      <div id="prof"></div>
+    </section>
+  </main>
+
+  <footer class="muted small">drowninginsymbols · meanings come from a checked database, not guesses</footer>
+
+  <script src="data.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
