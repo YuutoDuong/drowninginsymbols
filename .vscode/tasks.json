@@ -1,0 +1,25 @@
+{
+  // Ctrl+Shift+B runs "Open website". No debugger involved, so nothing can fail to attach.
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Open website",
+      "detail": "Opens index.html in your default browser",
+      "type": "process",
+      "command": "powershell.exe",
+      "args": ["-NoProfile", "-Command", "Start-Process -FilePath '${workspaceFolder}\\index.html'"],
+      "group": { "kind": "build", "isDefault": true },
+      "presentation": { "reveal": "never" },
+      "problemMatcher": []
+    },
+    {
+      "label": "Run checks",
+      "detail": "Opens check.html; it must say ALL CHECKS PASSED",
+      "type": "process",
+      "command": "powershell.exe",
+      "args": ["-NoProfile", "-Command", "Start-Process -FilePath '${workspaceFolder}\\check.html'"],
+      "presentation": { "reveal": "never" },
+      "problemMatcher": []
+    }
+  ]
+}
