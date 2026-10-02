@@ -1,0 +1,29 @@
+{
+  // F5 = open the site with the debugger attached (breakpoints in app.js work).
+  // Just want to look at the site? Ctrl+Shift+B is simpler (see tasks.json).
+  // "port" makes VS Code talk to the browser over a debugging port instead of its default pipe.
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Open website (Edge)",
+      "type": "msedge",
+      "request": "launch",
+      "file": "${workspaceFolder}/index.html",
+      "port": 9222
+    },
+    {
+      "name": "Open website (Chrome)",
+      "type": "chrome",
+      "request": "launch",
+      "file": "${workspaceFolder}/index.html",
+      "port": 9223
+    },
+    {
+      "name": "Run checks (Edge)",
+      "type": "msedge",
+      "request": "launch",
+      "file": "${workspaceFolder}/check.html",
+      "port": 9224
+    }
+  ]
+}
