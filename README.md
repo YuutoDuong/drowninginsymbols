@@ -1,7 +1,5 @@
 # drowninginsymbols
 
-# drowninginsymbols
-
 **Stop drowning in physics symbols.** Type a symbol or a formula and find out what it means in *your*
 topic and *your* textbook.
 
