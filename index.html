@@ -12,6 +12,8 @@
     <a class="logo" href="#/">drowninginsymbols<span class="caret">_</span></a>
     <nav>
       <a href="#/">Look up</a>
+      <a href="#/problems">Problems</a>
+      <a href="#/ai">Ask AI</a>
       <a href="#/table">Symbol table</a>
       <a href="#/history">History</a>
       <a href="#/profile">Profile</a>
@@ -27,8 +29,9 @@
         <div class="ask-row">
           <input id="q" spellcheck="false" placeholder="p    ρ    pV = nRT    Q = 5 C">
           <button class="btn primary" type="submit">Look up</button>
+          <button class="btn" type="button" data-ui="pick" data-arg="shot">Photo</button>
         </div>
-        <p class="muted small">Type or paste one symbol or a whole formula. Greek names work too: rho, nu, phi. Use _ for a subscript (v_0) and ^ for a power (v^2).</p>
+        <p class="muted small">Type or paste one symbol or a whole formula. Greek names work too: rho, nu, phi. Use _ for a subscript (v_0) and ^ for a power (v^2). Cannot type it? Press Photo, paste a screenshot, or drop a picture on the page.</p>
       </form>
       <details>
         <summary>Symbol keyboard</summary>
@@ -38,7 +41,42 @@
         <summary>Describe the shape</summary>
         <div id="shapes" class="row"></div>
       </details>
+      <div id="shot"></div>
       <div id="flow"></div>
+    </section>
+
+    <section id="page-problems" hidden>
+      <h1>Popular physics problems</h1>
+      <p class="muted">Classic problems by subject. Try each one yourself first, then open the hint or the solution. Every formula links to its card.</p>
+      <div id="probs"></div>
+    </section>
+
+    <section id="page-ai" hidden>
+      <h1>Ask AI</h1>
+      <p class="muted">Ask what a symbol or formula means, or get help with a homework problem. You can attach a photo. AI answers are not checked like the database, so double-check anything important.</p>
+      <div id="chatlog"></div>
+      <form id="chat" autocomplete="off">
+        <div id="chatimg"></div>
+        <label class="lbl" for="msg">Your question</label>
+        <textarea id="msg" rows="4" placeholder="What does λ mean in Q = λm?    Or paste a homework problem."></textarea>
+        <p class="row">
+          <button class="btn primary" type="submit">Send</button>
+          <button class="btn" type="button" data-ui="pick" data-arg="chat">Attach a photo</button>
+          <button class="btn" type="button" data-ui="newchat">New chat</button>
+        </p>
+        <p class="muted small">Ctrl+Enter sends. You can also paste a screenshot or drop a picture on the page.</p>
+      </form>
+      <details id="aiset">
+        <summary>AI settings</summary>
+        <p>The helper is Claude, made by Anthropic. It needs your own API key, which you create at <a href="https://console.anthropic.com/" target="_blank" rel="noopener">console.anthropic.com</a>. Anthropic charges that key for each question. A Claude chat subscription does not include API use.</p>
+        <p class="muted small">The key is saved in this browser only. It is sent only to api.anthropic.com, together with your question, any photo you attach and your textbook profile. Do not save it on a shared computer.</p>
+        <label class="lbl" for="aikey">API key</label>
+        <input id="aikey" type="password" autocomplete="off" spellcheck="false">
+        <label class="lbl" for="aimodel">Model</label>
+        <select id="aimodel"></select>
+        <p class="row"><button class="btn primary" type="button" data-ui="aisave">Save</button><button class="btn" type="button" data-ui="aiforget">Remove key</button></p>
+        <p id="aistate" class="note"></p>
+      </details>
     </section>
 
     <section id="page-table" hidden>
@@ -63,6 +101,7 @@
     </section>
   </main>
 
+  <input type="file" id="file" accept="image/*" hidden>
   <footer class="muted small">drowninginsymbols · meanings come from a checked database, not guesses</footer>
 
   <script src="data.js"></script>

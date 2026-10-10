@@ -8,12 +8,13 @@
 <body>
   <main>
     <h1>Checks</h1>
-    <p class="muted">Checks the database and the parser. Run after editing data.js.</p>
+    <p class="muted">Checks the database, the parser, the problems and the AI helper (without calling it). Run after editing data.js.</p>
     <pre id="out" class="card">running…</pre>
   </main>
   <script src="data.js"></script>
   <script src="app.js"></script>
   <script>
+  (async () => {
     const fails = [];
     const ok = (cond, msg) => { if (!cond) fails.push(msg); };
     const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
@@ -68,12 +69,53 @@
     ok(parse('Q = 5 C').syms.length === 1, '"Q = 5 C" asks about Q only');
     ok(hasWord('the moment of a force', 'moment') && !hasWord('momentum is conserved', 'moment'), 'words match whole words only');
     ok(hasWord('công của lực f', 'công của lực') && !hasWord('vật lí', 'vật l'), 'Vietnamese whole-word matching');
+    ok(same(symsOf('F_x = Fcosθ'), ['F_x', 'F', 'θ']), 'Fcosθ is F cos θ, not F_c o s θ');
+    ok(normalize('\\vec{F} = m\\vec{a}').s === 'F = ma' && normalize('\\frac{1}{2}mv^2').s === '(1)/(2)mv^2', 'pasted LaTeX is unwrapped');
+    ok(same(symsOf('\u2211I = 0'), ['Σ', 'I']) && normalize('\u2206U').s === 'ΔU' && parse('R = 10 \u2126').unit === 'Ω', 'look-alike Σ, Δ and Ω signs are read as the Greek letters');
+    ok(typeof normalize('constructor').s === 'string', 'ordinary words are not mistaken for Greek names');
+    ok(render('v′_1').includes('<sub>1</sub>'), 'a subscript after a prime is still drawn as a subscript');
+    const wordsOnly = context(parse('v'), { words: 'is the speed of a wave on a string', profile: neutral });
+    ok(same(wordsOnly.syms, ['v']) && wordsOnly.text.includes('wave'), 'words from a photo are searched, not read as symbols');
+
+    // --- the problems page ---
+    const pids = new Set();
+    for (const p of DB.problems) {
+      ok(!pids.has(p.id), `duplicate problem id ${p.id}`);
+      pids.add(p.id);
+      ok(DB.topics[p.topic] && p.sub && p.title && p.q && p.answer && p.trap, `${p.id}: needs topic, sub, title, q, answer and trap`);
+      ok(Array.isArray(p.steps) && p.steps.length > 1, `${p.id}: needs at least two steps`);
+      ok(Array.isArray(p.uses) && p.uses.length && p.uses.every(id => fids.has(id)), `${p.id}: "uses" must list formula ids that exist`);
+      ok([p.q, p.answer, p.trap, ...(p.steps || [])].every(t => (String(t).match(/`/g) || []).length % 2 === 0), `${p.id}: a backtick is not closed`);
+    }
+    for (const p of DB.problems) { try { problemHTML(p); } catch (e) { fails.push(`${p.id}: cannot be drawn (${e.message})`); } }
+    ok(fmt('<b onclick=x> `v_0`') === '&lt;b onclick=x&gt; <span class="math"><span class="v">v</span><sub>0</sub></span>', 'fmt escapes markup and renders formulas');
+    ok(fmt('**Step 1: `F = ma`**').startsWith('<b>Step 1: <span class="math">') && fmt('```\nF = ma\n```').startsWith('<span class="math">'), 'fmt handles bold around a formula and code blocks');
+
+    // --- the AI helper, with the network replaced by a stub (nothing is sent) ---
+    const realFetch = window.fetch, cfg = { key: 'test-key', model: 'test-model' };
+    let sent;
+    // a real reply starts with a thinking block, so the stub does too
+    window.fetch = async (url, o) => { sent = { url, o }; return { ok: true, status: 200, json: async () => ({ content: [{ type: 'thinking', thinking: '', signature: 'x' }, { type: 'text', text: 'hello' }], stop_reason: 'end_turn' }) }; };
+    ok(await ai('s', [{ role: 'user', content: 'q' }], 10, 'low', cfg) === 'hello', 'ai() returns the reply text');
+    const body = JSON.parse(sent.o.body), hd = sent.o.headers;
+    ok(sent.url === AI_URL && sent.o.method === 'POST' && hd['x-api-key'] === 'test-key' && hd['anthropic-version'] === '2023-06-01' && hd['anthropic-dangerous-direct-browser-access'] === 'true'
+      && body.model === 'test-model' && body.max_tokens === 10 && body.output_config.effort === 'low' && body.system === 's' && same(body.messages, [{ role: 'user', content: 'q' }]),
+      'ai() sends the browser headers, the key, the model, the limit, the effort, the system prompt and the messages');
+    window.fetch = async () => ({ ok: false, status: 401, json: async () => ({ error: { message: 'invalid x-api-key' } }) });
+    ok(await ai('s', [], 10, 'low', cfg).catch(e => e.message) === 'The API key was not accepted. Check it in AI settings.', 'ai() explains a rejected key');
+    window.fetch = async () => { throw new TypeError('offline'); };
+    ok(String(await ai('s', [], 10, 'low', cfg).catch(e => e.message)).startsWith('Could not reach'), 'ai() explains a network failure');
+    window.fetch = async () => ({ ok: true, status: 200, json: async () => ({ content: [{ type: 'thinking', thinking: '', signature: 'x' }], stop_reason: 'max_tokens' }) });
+    ok(String(await ai('s', [], 10, 'low', cfg).catch(e => e.message)).startsWith('The AI ran out of room'), 'ai() explains a reply that was all thinking');
+    window.fetch = realFetch;
+    ok(tutorSystem()[0].text.includes('pV = nRT') && tutorSystem()[0].cache_control, 'the AI is given the database');
 
     const out = document.getElementById('out');
     out.textContent = fails.length
       ? `${fails.length} PROBLEM(S)\n\n` + fails.join('\n')
-      : `ALL CHECKS PASSED\n${DB.meanings.length} meanings, ${DB.formulas.length} formulas, ${DB.glyphs.length} glyphs`;
+      : `ALL CHECKS PASSED\n${DB.meanings.length} meanings, ${DB.formulas.length} formulas, ${DB.glyphs.length} glyphs, ${DB.problems.length} problems`;
     document.title = (fails.length ? 'FAIL' : 'PASS') + ' · checks';
+  })().catch(e => { document.getElementById('out').textContent = 'THE CHECKS CRASHED\n\n' + e.stack; document.title = 'FAIL · checks'; });
   </script>
 </body>
 </html>

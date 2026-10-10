@@ -1,10 +1,11 @@
 # drowninginsymbols
 
-**Stop drowning in physics symbols.** Type a symbol or a formula and find out what it means in *your*
-topic and *your* textbook.
+**Stop drowning in physics symbols.** Type a symbol or a formula, or photograph it, and find out what it
+means in *your* topic and *your* textbook.
 
 No install, no build step, no server, no account. Plain HTML, CSS and JavaScript that runs offline in
-any modern browser.
+any modern browser. Two optional features, reading a photo and the AI helper, call the Claude API and
+need your own API key (see [Turn on the AI helper](#turn-on-the-ai-helper-optional)).
 
 ## Mission
 
@@ -45,6 +46,15 @@ way an experienced teacher would.
     meanings of the same letter, and look-alikes.
   - **Formula card:** each symbol explained, when the formula applies, and the other ways it is written,
     including sign-convention differences.
+- **Look up from a photo:** press **Photo**, paste a screenshot, or drop a picture on the page. The AI
+  only reads the characters and shows you what it read so you can correct it. What they mean still
+  comes from the database.
+- **Popular problems:** 33 classic problems across five subjects. Each has a hint (the formulas you
+  need, with links to their cards), a step-by-step solution, a "watch the notation" note and links to
+  related problems.
+- **Ask AI:** a helper that knows the site's database and your textbook profile. Ask what a symbol or
+  formula means, or get step-by-step help with homework, with or without a photo. Its answers are not
+  checked like the database, and the site says so.
 - **Feedback loop:** "Did this help?", a history of your lookups, and a list of missing symbols you can
   export to grow the database.
 - **The database:** 294 meanings and 199 formula forms across mechanics, electricity & magnetism, thermal
@@ -70,15 +80,32 @@ The site runs straight from the file, so no web server is needed. Never point th
 at `http://localhost:...`. Your profile, history and reports are stored only in your browser
 (localStorage).
 
+### Turn on the AI helper (optional)
+
+Photo lookup and **Ask AI** use [Claude](https://www.anthropic.com/claude) through the Anthropic API.
+The site has no server, so each person uses their own API key:
+
+1. Create a key at [console.anthropic.com](https://console.anthropic.com/). API use is billed by
+   Anthropic to that key. A Claude chat subscription does not include it.
+2. Open the site, go to **Ask AI → AI settings**, paste the key, pick a model and press **Save**.
+
+The key is saved in that browser only (localStorage) and is sent only to `api.anthropic.com`, together
+with the question, any attached photo and the textbook profile. **Never write a key into the code or
+commit it to GitHub.** Every Ask AI question also sends the notation database (about 55 KB of text) so
+that answers match the site; the API caches it between questions. Reading a photo sends only the photo.
+The smaller models in the settings cost less.
+
+Everything else on the site keeps working without a key.
+
 ## Project structure
 
 | File | What it is |
 | --- | --- |
 | `index.html` | The page |
 | `style.css` | The black and white look (with a light mode toggle) |
-| `app.js` | Reads the input, works out the context, ranks meanings, draws the answers |
-| `data.js` | The database: meanings, formulas, Greek letters and their shapes |
-| `check.html` | Self-check for the database and the parser |
+| `app.js` | Reads the input, works out the context, ranks meanings, draws the answers; also the problems page, photo lookup and the AI helper |
+| `data.js` | The database: meanings, formulas, Greek letters and their shapes, and the problems |
+| `check.html` | Self-check for the database, the parser, the problems and the AI helper (no network calls) |
 | `.vscode/` | Ctrl+Shift+B task and F5 debug launchers |
 
 A lookup goes through these steps: **Input → Recognize → Context → Look up → Answer → Did this help?**
@@ -104,16 +131,32 @@ All content lives in `data.js`. A meaning looks like this:
 Formulas go in `formulas`. `f` uses the same syntax (`^2` for powers, `/` for division), `vars` maps every
 symbol in `f` to a meaning `id`, and different written forms of one law share the same `law`.
 
+Problems go in `problems`. Text between backticks is a formula in the same syntax and is drawn as
+maths; write numbers and units outside the backticks. `uses` lists the `id` of each formula in the
+form the solution writes it, and the page adds the other textbooks' forms by itself:
+
+```js
+{ "id": "mech-braking-distance", "topic": "mech", "sub": "Kinematics", "title": "Braking distance of a car",
+  "q": "A car is travelling at 20 m/s when the driver brakes. ...",
+  "uses": ["velocity-displacement-v2-u2"],
+  "steps": ["Write down what is known. Initial velocity `u` = 20 m/s. ...", "..."],
+  "answer": "The car travels 40 m before it stops.",
+  "trap": "The starting velocity is `u` in British and Indian textbooks, but `v_0` in ..." }
+```
+
 Then run the checks. Found a wrong meaning or a missing symbol? Open an issue. The site's
 **History → Reported** list can be copied as JSON to attach.
 
 ## Roadmap
 
 - [x] Type, keyboard and shape input; context inference; symbol and formula cards; feedback and history
-- [ ] Draw a symbol on screen, or take a photo of it
+- [x] Look up from a photo or a screenshot
+- [x] Popular problems by subject, with hints, solutions and notation notes
+- [x] An AI helper that knows this database (bring your own API key)
+- [ ] A small server, so visitors can use the AI helper without their own key
+- [ ] Draw a symbol on screen
 - [ ] "Translate to my notation", aware of sign conventions, not just letter swaps
 - [ ] Compare two formulas: "my teacher wrote X, my book wrote Y: is it the same law?"
-- [ ] An AI helper that answers only from this database
 
 ## License
 

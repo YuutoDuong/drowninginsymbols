@@ -13,13 +13,14 @@ const $ = (sel, el = document) => el.querySelector(sel);
 
 /* ---------------- text -> tokens ---------------- */
 const NAMES = {
+  __proto__: null, // or NAMES['constructor'] would be found
   alpha: 'α', beta: 'β', gamma: 'γ', Gamma: 'Γ', delta: 'δ', Delta: 'Δ', epsilon: 'ε', varepsilon: 'ε', zeta: 'ζ',
   eta: 'η', theta: 'θ', vartheta: 'θ', Theta: 'Θ', kappa: 'κ', lambda: 'λ', Lambda: 'Λ', mu: 'μ', nu: 'ν', xi: 'ξ',
   pi: 'π', Pi: 'Π', rho: 'ρ', sigma: 'σ', Sigma: 'Σ', tau: 'τ', upsilon: 'υ', phi: 'φ', varphi: 'φ', Phi: 'Φ',
   chi: 'χ', psi: 'ψ', Psi: 'Ψ', omega: 'ω', Omega: 'Ω', hbar: 'ℏ', nabla: '∇', partial: '∂', propto: '∝',
   infty: '∞', sqrt: '√', ell: 'ℓ', cdot: '·', times: '×', approx: '≈'
 };
-const VARIANTS = { 'ϕ': 'φ', 'ϵ': 'ε', 'ϑ': 'θ', 'ϱ': 'ρ', 'ħ': 'ℏ', 'µ': 'μ', 'Ω': 'Ω', '’': '′', "'": '′', '−': '-', '–': '-', '½': '1/2', '⋅': '·' };
+const VARIANTS = { 'ϕ': 'φ', 'ϵ': 'ε', 'ϑ': 'θ', 'ϱ': 'ρ', 'ħ': 'ℏ', 'µ': 'μ', '\u2126': 'Ω', '\u2206': 'Δ', '\u2211': 'Σ', '’': '′', "'": '′', '−': '-', '–': '-', '½': '1/2', '⋅': '·' };
 const SUB = { '₀': '0', '₁': '1', '₂': '2', '₃': '3', '₄': '4', '₅': '5', '₆': '6', '₇': '7', '₈': '8', '₉': '9', 'ₐ': 'a', 'ₑ': 'e', 'ₒ': 'o', 'ₓ': 'x', 'ₕ': 'h', 'ₖ': 'k', 'ₗ': 'l', 'ₘ': 'm', 'ₙ': 'n', 'ₚ': 'p', 'ₛ': 's', 'ₜ': 't' };
 const SUP = { '⁰': '0', '¹': '1', '²': '2', '³': '3', '⁴': '4', '⁵': '5', '⁶': '6', '⁷': '7', '⁸': '8', '⁹': '9', '⁻': '-', '⁺': '+' };
 const wrap = x => x.length > 1 ? '{' + x + '}' : x;
@@ -29,8 +30,11 @@ function normalize(raw) {
   let s = String(raw).trim();
   const notes = [];
   if (NAMES[s]) return { s: NAMES[s], notes: [`“${s}” is the Greek letter ${NAMES[s]}.`] };
-  s = s.replace(/\\mathcal\{E\}/g, 'ℰ').replace(/\\([A-Za-z]+)/g, (m, n) => NAMES[n] ?? m);
-  s = s.replace(/[ϕϵϑϱħµΩ’'−–½⋅]/g, c => {
+  s = s.replace(/[\u20d0-\u20ff\u0304\u0305]/g, '') // an arrow or a bar drawn over a letter is not part of the symbol
+    .replace(/\\[dt]?frac\s*\{([^{}]*)\}\s*\{([^{}]*)\}/g, '($1)/($2)').replace(/\\sqrt\s*\{([^{}]*)\}/g, '√($1)')
+    .replace(/\\(?:vec|overrightarrow|bar|overline|hat|mathbf|mathrm|text)\s*\{([^{}]*)\}/g, '$1')
+    .replace(/\\mathcal\{E\}/g, 'ℰ').replace(/\\([A-Za-z]+)/g, (m, n) => NAMES[n] ?? m);
+  s = s.replace(/[ϕϵϑϱħµ\u2126\u2206\u2211’'−–½⋅]/g, c => {
     if ('ϕϵϑϱ'.includes(c)) notes.push(`${c} and ${VARIANTS[c]} are the same letter in a different font.`);
     return VARIANTS[c];
   });
@@ -62,7 +66,7 @@ function tokenize(s) {
     if (/\s/.test(s[i])) { i++; continue; }
     if ((m = rest.match(/^\d+(?:[.,]\d+)?/))) { out.push({ t: 'num', v: m[0] }); i += m[0].length; continue; }
     if ((m = rest.match(FN))) { out.push({ t: 'fn', v: m[0] }); i += m[0].length; continue; }
-    const d = dict().find(([k]) => rest.startsWith(k));
+    const d = dict().find(([k]) => rest.startsWith(k) && !FN.test(rest.slice(1))); // "Fcosθ" is F cos θ, not F_c o s θ
     if (d) { out.push({ t: 'sym', v: d[1] }); i += d[0].length; continue; }
     if (LETTER.test(s[i])) {
       m = rest.match(/^(.)(?:_(?:\{([^}]*)\}|([^\s{}])))?(′*)/);
@@ -80,7 +84,7 @@ const symsOf = s => [...new Set(tokenize(normalize(s).s).filter(k => k.t === 'sy
 function symHTML(v) {
   const m = v.match(/^(.+?)(?:_\{?(.*?)\}?)?(′*)$/);
   const cls = /^[A-Za-zα-ωđℓ]+$/.test(m[1]) ? 'v' : 'vu';
-  return `<span class="${cls}">${esc(m[1])}</span>${m[2] ? `<sub>${esc(m[2])}</sub>` : ''}${m[3]}`;
+  return `<span class="${cls}">${esc(m[1])}</span>${m[2] ? `<sub>${esc(m[2])}</sub>` : ''}${m[3] && `<span class="prime">${m[3]}</span>`}`;
 }
 // Spaced with CSS margins, not spaces: an italic E swallows a plain space ("E= hf").
 const OPS = { '=': '<span class="op">=</span>', '+': '<span class="op">+</span>', '-': '<span class="op">−</span>', '*': '·', '·': '·', '≈': '<span class="op">≈</span>', '∝': '<span class="op">∝</span>', '{': '', '}': '' };
@@ -88,7 +92,7 @@ function toHTML(toks) {
   let h = '';
   for (let i = 0; i < toks.length; i++) {
     const k = toks[i];
-    if (k.t === 'op' && k.v === '^') { // superscript: a {group}, or one token (with its minus sign)
+    if (k.t === 'op' && (k.v === '^' || k.v === '_')) { // superscript, or a loose subscript (v′_1): a {group}, or one token (with its minus sign)
       let j = i + 1;
       const grp = [];
       if (toks[j]?.v === '{') {
@@ -103,15 +107,24 @@ function toHTML(toks) {
         if (toks[j]?.v === '-') grp.push(toks[j++]);
         if (toks[j]) grp.push(toks[j]);
       }
-      h += `<sup>${toHTML(grp)}</sup>`;
+      const tag = k.v === '^' ? 'sup' : 'sub';
+      h += `<${tag}>${toHTML(grp)}</${tag}>`;
       i = j;
       continue;
     }
+    // a minus that starts something (k = -d′/d) is a sign, not a subtraction: no space after it
+    if (k.v === '-' && (!toks[i - 1] || (toks[i - 1].t === 'op' && !')}'.includes(toks[i - 1].v)))) { h += '−'; continue; }
     h += k.t === 'sym' ? symHTML(k.v) : k.t === 'fn' ? `<span class="fn">${k.v} </span>` : k.t === 'num' ? k.v : (OPS[k.v] ?? esc(k.v));
   }
   return h;
 }
 const render = s => toHTML(tokenize(normalize(s).s));
+// Text with `formulas` between backticks (problems, AI replies). Everything outside the
+// backticks is escaped, so an AI reply cannot inject markup.
+const fmt = s => String(s)
+  .replace(/```[^\n`]*\n([\s\S]*?)```/g, (m, body) => body.trim().split('\n').map(l => l.trim() && '`' + l.trim() + '`').join('\n')) // a code block: one formula per line
+  .split(/`([^`\n]+)`/).map((part, i) => i % 2 ? `<span class="math">${render(part)}</span>` : esc(part))
+  .join('').replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
 
 /* ---------------- understanding a question ---------------- */
 const normUnit = u => normalize(u).s.replace(/[\s{}]/g, '').replace(/[·*×]/g, '.');
@@ -153,7 +166,7 @@ function context(p, o = {}) {
   const mathy = extra.split(/\s+/).filter(w => /[=_^α-ωΑ-Ω]/.test(w) || [...w.replace(/[.,;:()]/g, '')].length <= 2).join(' ');
   const syms = [...new Set([...p.syms, ...symsOf(mathy)])];
   return {
-    syms, unit: p.unit, unitOnly: p.unitOnly, text: (p.s + ' ' + extra).toLowerCase(), topic: o.topic || null,
+    syms, unit: p.unit, unitOnly: p.unitOnly, text: (p.s + ' ' + extra + ' ' + (o.words || '')).toLowerCase(), topic: o.topic || null,
     formula: p.formula || matchFormula(symsOf(mathy)), profile: o.profile || profile()
   };
 }
@@ -200,14 +213,15 @@ const formulaById = id => DB.formulas.find(f => f.id === id);
 const glyph = sym => DB.glyphs.find(g => g.g === sym.match(/^(.+?)(?:_|′|$)/)[1]);
 const curTags = cur => cur.map(c => `<span class="tag">${esc(DB.cur[c] || c)}</span>`).join(' ');
 const btn = (act, label, arg = '', cls = '') => `<button type="button" class="btn ${cls}" data-act="${act}" data-arg="${esc(arg)}">${label}</button>`;
+const askBtn = (label, text) => `<button type="button" class="btn" data-ui="askai" data-arg="${esc(text)}">${label}</button>`;
 const step = (n, title, body) => `<section class="step"><h2><span class="n">${n}</span>${title}</h2>${body}</section>`;
 const KIND = { quantity: 'Physical quantity', constant: 'Constant', unit: 'Unit', label: 'Label (a name, not a quantity)', operator: 'Maths notation' };
 
 let S = {};
-const blank = () => ({ p: null, target: null, confirmed: false, tries: 0, topic: null, askTopic: false, idk: false, pasted: '', pasteUsed: false, showAll: false, pick: null, fb: null, rounds: 0, end: null });
+const blank = () => ({ p: null, target: null, confirmed: false, tries: 0, topic: null, askTopic: false, idk: false, pasted: '', words: '', pasteUsed: false, showAll: false, pick: null, fb: null, rounds: 0, end: null });
 
 function ranked() {
-  return rank(S.target.sym, context(S.p, { pasted: S.pasted, topic: S.topic }));
+  return rank(S.target.sym, context(S.p, { pasted: S.pasted, words: S.words, topic: S.topic }));
 }
 function log(outcome, what) {
   const h = store.get('history', []);
@@ -230,10 +244,12 @@ function report(expected) {
   store.set('queue', q.slice(0, 200));
 }
 
-function submit(raw) {
+// `words`: text that came with the input (what is printed around a formula in a photo). It is
+// only searched for topic words; unlike a pasted sentence, its short words are not read as symbols.
+function submit(raw, words = '') {
   if (S.p && S.confirmed && !S.end) log('abandoned', answerName());
   const tries = S.p && !S.confirmed ? S.tries : 0; // retyping after "No, let me fix it" is the same attempt
-  S = { ...blank(), tries, p: parse(raw) };
+  S = { ...blank(), tries, p: parse(raw), words };
   if (S.p.syms.length === 1) S.target = { sym: S.p.syms[0] };
   draw();
 }
@@ -260,6 +276,7 @@ function stepRecognize() {
   } else if (!S.confirmed) {
     h += `<p class="lbl">Which symbol are you asking about?</p><p class="row">${p.syms.map(x => btn('sym', `<span class="math">${symHTML(x)}</span>`, x, 'chip')).join('')}</p>`;
     if (p.formula) h += `<p class="row">${btn('whole', `Explain the whole formula: ${esc(p.formula.name)}`, '', 'primary')}</p>`;
+    else h += `<p class="row"><span class="note">The whole formula is not in our database.</span>${askBtn('Ask the AI about it', `What does this formula mean, and what does each symbol stand for?\n\n\`${p.s}\``)}</p>`;
   }
   if (S.confirmed) {
     h += `<p class="done">✓ ${S.target.formula ? esc(formulaById(S.target.formula).name) : `<span class="math">${symHTML(S.target.sym)}</span>`}</p>`;
@@ -359,7 +376,8 @@ function stepAnswer() {
 
 function stepFeedback() {
   if (S.end) {
-    return step('07', 'Done', `<p>Saved to your <a href="#/history">history</a> as <b>${S.end}</b>.</p><p class="row">${btn('new', 'New lookup', '', 'primary')}</p>`);
+    const ask = S.end === 'unresolved' ? askBtn('Ask the AI instead', `Help me work out what \`${S.target.sym || S.p.s}\` means.${S.target.sym && S.p.syms.length > 1 ? ` I saw it in \`${S.p.s}\`.` : ''}`) : '';
+    return step('07', 'Done', `<p>Saved to your <a href="#/history">history</a> as <b>${S.end}</b>.</p><p class="row">${btn('new', 'New lookup', '', 'primary')}${ask}</p>`);
   }
   let h;
   if (S.fb === 'menu') {
@@ -462,16 +480,270 @@ function drawSetup() {
     : `<div class="card setup"><p class="lbl">Set this once</p><p>Symbols depend on where you learned physics. This helps us guess.</p>${profileForm()}<p class="row">${btn('saveprofile', 'Save', '', 'primary')}</p></div>`;
 }
 
+/* ---------------- popular problems ---------------- */
+let probTopic = '';
+// Every way a law is written, the reader's own textbooks first.
+function formsOf(law) {
+  const cur = profile().cur;
+  const fit = f => f.cur.includes(cur) ? 2 : f.cur.includes('all') ? 1 : 0;
+  return DB.formulas.filter(f => f.law === law).sort((a, b) => fit(b) - fit(a));
+}
+function problemHTML(p) {
+  const laws = x => x.uses.map(id => formulaById(id).law);
+  const close = x => (x.topic === p.topic && x.sub === p.sub) || laws(x).some(l => laws(p).includes(l));
+  const others = DB.problems.filter(x => x !== p);
+  const related = [...others.filter(close), ...others.filter(x => !close(x) && x.topic === p.topic)].slice(0, 3);
+  const hint = p.uses.map(id => { // the form the solution uses, then how other textbooks write it
+    const f = formulaById(id), rest = formsOf(f.law).filter(x => x !== f);
+    return `<li><button type="button" class="btn link" data-ui="formula" data-arg="${f.id}"><span class="math">${render(f.f)}</span></button> <span class="muted">${esc(f.name)}</span>${rest.length ? `<p class="also muted small">Also written: ${rest.map(x => `<span class="math">${render(x.f)}</span>`).join('')}</p>` : ''}</li>`;
+  }).join('');
+  return `<details class="prob" id="prob-${p.id}"><summary>${esc(p.title)} <span class="tag">${esc(p.sub)}</span></summary>
+    <p>${fmt(p.q)}</p>
+    <details><summary>Hint: the formulas you need</summary><ul class="forms">${hint}</ul></details>
+    <details><summary>Solution</summary><ol>${p.steps.map(s => `<li>${fmt(s)}</li>`).join('')}</ol><p><b>Answer.</b> ${fmt(p.answer)}</p></details>
+    <p class="warn"><b>Watch the notation.</b> ${fmt(p.trap)}</p>
+    <p class="row">${askBtn('Ask the AI for a hint', `Give me a hint for this problem, not the full solution.\n\n${p.q}`)}</p>
+    ${related.length ? `<p class="muted small">Related: ${related.map(x => `<a href="#/problems/${x.id}">${esc(x.title)}</a>`).join(' · ')}</p>` : ''}
+  </details>`;
+}
+function drawProblems(openId) {
+  const open = DB.problems.find(p => p.id === openId);
+  if (open && probTopic !== open.topic) probTopic = '';
+  const topics = [...new Set(DB.problems.map(p => p.topic))];
+  $('#probs').innerHTML = `<p class="row">${['', ...topics].map(t => `<button type="button" class="btn${t === probTopic ? ' primary' : ''}" data-ui="ptopic" data-arg="${t}">${t ? esc(DB.topics[t]) : 'All subjects'}</button>`).join('')}</p>`
+    + topics.filter(t => !probTopic || t === probTopic).map(t => `<h2 class="sub">${esc(DB.topics[t])}</h2>${DB.problems.filter(p => p.topic === t).map(problemHTML).join('')}`).join('');
+  if (open) { const el = $('#prob-' + open.id); el.open = true; el.scrollIntoView(); }
+}
+
+/* ---------------- AI helper: optional, the rest of the site works without it ---------------- */
+// Calls the Claude API straight from the browser with the reader's own key. To hide a key behind
+// your own server later, point AI_URL at that server and let it add the key.
+const AI_URL = 'https://api.anthropic.com/v1/messages';
+const MODELS = {
+  'claude-opus-5-5': 'Claude Opus 5.5: most capable',
+  'claude-sonnet-5-5': 'Claude Sonnet 5.5: faster and cheaper',
+  'claude-haiku-5-5': 'Claude Haiku 5.5: fastest and cheapest'
+};
+const aiCfg = () => store.get('ai', { key: '', model: Object.keys(MODELS)[0] });
+
+// The models think before they answer and that thinking counts toward max_tokens, so `max` leaves
+// room for it. `effort` (low, medium, high) sets how much they think.
+async function ai(system, messages, max, effort, cfg = aiCfg()) {
+  let res, data;
+  try {
+    res = await fetch(AI_URL, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-api-key': cfg.key, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
+      body: JSON.stringify({ model: cfg.model, max_tokens: max, output_config: { effort }, system, messages })
+    });
+    data = await res.json().catch(() => ({}));
+  } catch { throw new Error('Could not reach the AI service. Check your internet connection and try again.'); }
+  if (res.status === 401) throw new Error('The API key was not accepted. Check it in AI settings.');
+  if (!res.ok) throw new Error(`The AI service said: ${(data.error || {}).message || 'error ' + res.status}`);
+  if (data.stop_reason === 'refusal') throw new Error('The AI declined to answer this one. Reword the question, or choose another model in AI settings.');
+  const text = (data.content || []).filter(b => b.type === 'text').map(b => b.text).join('').trim();
+  if (!text) throw new Error(data.stop_reason === 'max_tokens' ? 'The AI ran out of room before it answered. Try again.' : 'The AI sent an empty answer. Try again.');
+  return text + (data.stop_reason === 'max_tokens' ? '\n\n(The answer was cut off here. Ask it to continue.)' : '');
+}
+
+const TUTOR = `You are the study helper inside drowninginsymbols, a website that helps physics beginners work out what symbols and formulas mean. Physics notation is not universal: the same letter means different things in different topics, countries and textbooks.
+
+What you help with:
+- Finding or identifying a symbol or formula. Say what it most likely means in the student's context and why (the unit, the other symbols, the topic). If the context does not settle it, list the possible meanings by topic, or ask one short question.
+- Homework. Work step by step: list what is given with units, name the formula and say why it applies, say what each symbol stands for the first time it appears, put in the numbers with units, then sanity-check the result. If the student shows their own working, check it first and point to the first step that goes wrong. If the student asks for a hint, give only the next step and stop; keep to one step at a time until they ask for the full solution.
+- Photos. First say how you read the formula or problem in the photo, so the student can correct you.
+
+Rules:
+- The notation database below is the website's checked source. Use it for what a symbol means and for how each textbook tradition writes a formula ("intl" = English-language textbooks, "vn" = Vietnamese SGK textbooks, "all" = both). If something is not in it, answer from general physics knowledge and say that it is not in the site's database.
+- Notation: write with the letters the student used in their question or photo. If they used none, use the notation of their textbooks (stated at the end). If that is not known, use the form marked "all" when there is one, otherwise give the "intl" and the "vn" form side by side. When the other tradition writes the same law differently, add one line saying so. Watch for sign conventions, not just letters.
+- Reply in the language the student writes in. The sentence "Please read this photo and help me with it." is added by the website when a photo is sent without text: then reply in the language of the photo. Be brief and plain: the student is a beginner.
+- Stay on physics, the maths it needs, and study help.
+
+Format: plain text. No Markdown headings, tables or code blocks, no LaTeX, no backslashes, no dollar signs. **Bold** is allowed for a few key words, never around a formula.
+Put every symbol and formula between single backticks, one formula per pair and on one line, in this syntax, which the website draws as maths:
+- Greek letters as characters (ρ, λ, Δ). No arrows or bars over letters: say in words that something is a vector or an average.
+- Subscripts with _, always in braces when longer than one character: v_0, F_{net}, v_{max}, m_{water}. On one letter the order is subscript, prime, power: v_1′, v_0^2.
+- Powers with ^ (v^2, e^{-λt}); fractions with / and brackets, as in (1/2) m v^2; roots as √( ).
+- Multiplication: put a space between the symbols, and before and after sin, cos, tan, ln, log: p V = n R T, F_x = F cos θ. Never glue two letters together, except a name printed as one symbol, such as KE or PE.
+Inside backticks go symbols and the pure numbers that belong to a formula (1/2, 2π). Measured values, units and arithmetic stay outside as normal text, like this: \`v = v_0 + a t\`, so \`v\` = 0 + 2.0 × 5.0 = 10 m/s. Also outside: 9.8 m/s², 3.0 × 10⁸ m/s. Name isotopes in words (carbon-14, uranium-238).`;
+let AI_DB = null; // the database as compact text: built once, and cached by the API between questions
+const aiDB = () => AI_DB ??= 'SYMBOLS (symbol | meaning | Vietnamese name | topic | kind | SI unit | textbooks)\n'
+  + DB.meanings.map(m => [m.sym, m.name, m.vi || '', m.topic, m.kind, m.unit || '', m.cur.join(',')].join(' | ')).join('\n')
+  + '\n\nFORMULAS (formula | name | law | topic | textbooks | note). Rows that share a law are the same law as different textbooks write it.\n'
+  + DB.formulas.map(f => [f.f, f.name, f.law, f.topic, f.cur.join(','), f.note || ''].join(' | ')).join('\n');
+function tutorSystem() {
+  const P = profile();
+  return [
+    { type: 'text', text: TUTOR + '\n\n' + aiDB(), cache_control: { type: 'ephemeral' } },
+    { type: 'text', text: `This student's textbooks: ${P.cur === 'any' ? 'not known, could be either tradition' : DB.cur[P.cur]}. Level: ${P.level === 'uni' ? 'university' : 'high school'}.` }
+  ];
+}
+
+// Shrinks a photo in the browser before it is sent: less to upload, cheaper to read.
+async function shrink(file, max = 1568) {
+  const bmp = await createImageBitmap(file).catch(() => { throw new Error('That file could not be opened as an image. Try a JPEG or PNG.'); });
+  const k = Math.min(1, max / Math.max(bmp.width, bmp.height));
+  const c = Object.assign(document.createElement('canvas'), { width: Math.round(bmp.width * k), height: Math.round(bmp.height * k) });
+  const g = c.getContext('2d');
+  g.fillStyle = '#fff'; // a see-through PNG would otherwise turn black as a JPEG
+  g.fillRect(0, 0, c.width, c.height);
+  g.drawImage(bmp, 0, 0, c.width, c.height);
+  return c.toDataURL('image/jpeg', 0.85);
+}
+const imgBlock = url => ({ type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: url.split(',')[1] } });
+
+let chat = [], chatImg = null, chatBusy = false, chatErr = '';
+function drawChat() {
+  const who = { user: 'You', assistant: 'AI' };
+  $('#chatlog').innerHTML = chat.map(m => `<div class="msg"><p class="lbl">${who[m.role]}</p>${
+    (typeof m.content === 'string' ? [{ type: 'text', text: m.content }] : m.content).map(b => b.type === 'image'
+      ? `<img class="thumb" src="data:image/jpeg;base64,${b.source.data}" alt="Your photo">`
+      : `<div class="body">${fmt(b.text)}</div>`).join('')}</div>`).join('')
+    + (chatBusy ? '<div class="msg"><p class="lbl">AI</p><p class="muted">Thinking…</p></div>' : '')
+    + (chatErr ? `<p class="warn">${esc(chatErr)}</p>` : '');
+  $('#chatimg').innerHTML = chatImg ? `<img class="thumb" src="${chatImg}" alt="Attached photo"><p class="row"><button type="button" class="btn" data-ui="unattach">Remove photo</button></p>` : '';
+  const last = $('#chatlog').lastElementChild;
+  if (last) last.scrollIntoView({ block: 'nearest' });
+}
+function drawAi() {
+  const c = aiCfg();
+  $('#aimodel').innerHTML = Object.entries(MODELS).map(([id, label]) => `<option value="${id}"${id === c.model ? ' selected' : ''}>${esc(label)}</option>`).join('');
+  $('#aikey').value = '';
+  $('#aikey').placeholder = c.key ? `Saved key ends in …${c.key.slice(-4)}. Paste a new one to replace it.` : 'sk-ant-…';
+  $('#aistate').textContent = c.key ? 'A key is saved in this browser.' : 'No key saved. The rest of the site works without one.';
+  if (!c.key) $('#aiset').open = true;
+  drawChat();
+}
+async function sendChat() {
+  const text = $('#msg').value.trim(), img = chatImg, mine = chat;
+  if (chatBusy || (!text && !img)) return;
+  if (!aiCfg().key) { chatErr = 'Add your API key in AI settings first.'; $('#aiset').open = true; drawChat(); return; }
+  mine.push({ role: 'user', content: [...(img ? [imgBlock(img)] : []), { type: 'text', text: text || 'Please read this photo and help me with it.' }] });
+  $('#msg').value = '';
+  chatImg = null; chatBusy = true; chatErr = '';
+  drawChat();
+  let reply, err = '';
+  try { reply = await ai(tutorSystem(), mine, 16000, 'medium'); } catch (e) { err = e.message; }
+  if (chat !== mine) return; // "New chat" was pressed while waiting
+  chatBusy = false;
+  if (err) { // take the question back out, so it can be sent again
+    mine.pop();
+    if (!$('#msg').value) $('#msg').value = text;
+    chatImg = chatImg || img;
+    chatErr = err;
+  } else mine.push({ role: 'assistant', content: reply });
+  drawChat();
+}
+
+/* ---------------- look up from a photo ---------------- */
+// The AI only reads the photo (shape -> characters). What the symbols mean still comes from the database.
+const READER = `You read photos for a physics notation website. Find every formula, equation or stand-alone symbol in the image, printed or handwritten, and copy it out. Do not solve or explain anything.
+
+Reply with one JSON object and nothing else:
+{"formulas": ["..."], "text": "...", "note": "..."}
+- formulas: each formula or symbol, in reading order, at most 8, in the syntax below. An empty list if there is none.
+- text: the words printed right next to the formulas, copied as written in their own language, at most 40 words. Empty if there are none.
+- note: one short sentence, only if something was hard to read (for example "the subscript could be 0 or o"). Otherwise empty.
+
+Syntax (plain characters only: no LaTeX, no backslashes, no dollar signs):
+- Letters exactly as written, keeping upper and lower case. Greek letters as characters (ρ, λ, Δ, Σ, ω), never as names. A curly script E (emf) is ℰ.
+- Leave out arrows, bars, hats and dots drawn over a letter, and ignore bold: a vector F is just F.
+- Subscripts with _, in braces when longer than one character (v_0, F_{ms}, T_{1/2}). Powers with ^ (v^2, e^{-λt}). Primes with ′ (d′). On one letter the order is subscript, prime, power: v_1′, v_0^2.
+- Fractions with / and brackets: (1/2) m v^2, G m_1 m_2/r^2. Square roots as √( ).
+- Multiplication: put a space between the symbols, and before and after sin, cos, tan, tg, cot, cotg, ln, lg, log: p V = n R T, A = F s cos α, n_1 sin i = n_2 sin r, k q_1 q_2/(ε r^2). Never glue two letters together, except a name printed as one symbol, such as KE or PE.
+- Between numbers the multiplication sign is ·, whatever the page prints (a dot, × or x): 9·10^9, 1,6·10^{-19}.
+- A value with its unit is one entry, with a space before the unit: Q = 5 C, g = 9,8 m/s^2. In any other kind of entry, leave the units out.`;
+let shot = null, page = 'lookup', pickFor = 'shot';
+function drawShot() {
+  const s = shot;
+  if (!s) { $('#shot').innerHTML = ''; return; }
+  let h = '<p class="lbl">From your photo</p>';
+  if (s.busy) h += '<p>Reading your photo…</p>';
+  else if (s.nokey) h += '<p>Reading a photo needs the AI helper. <a href="#/ai">Add your API key under Ask AI</a>, then choose the photo again. Until then, type the formula or use the symbol keyboard.</p>';
+  else if (s.err) h += `<p class="warn">${esc(s.err)}</p>`;
+  else if (!s.formulas.length) h += '<p>We could not find a formula or a symbol in this photo. Try a closer, sharper photo, or type it in.</p>';
+  else h += `<p>${s.formulas.length > 1 ? 'We found these. Pick the one you are stuck on:' : 'We found this. Check it against your photo:'}</p>
+    <p class="row">${s.formulas.map(f => `<button type="button" class="btn" data-go="${esc(f)}"><span class="math">${render(f)}</span></button>`).join('')}</p>${s.note ? `<p class="note">${esc(s.note)}</p>` : ''}`;
+  h += `<p class="row">${s.url && !s.busy && !s.nokey ? '<button type="button" class="btn" data-ui="shotask">Ask the AI about this photo</button>' : ''}<button type="button" class="btn" data-ui="shotremove">Remove photo</button></p>`;
+  $('#shot').innerHTML = `<div class="card shot">${s.url ? `<img src="${s.url}" alt="Your photo">` : ''}<div>${h}</div></div>`;
+}
+async function readPhoto(file) {
+  const mine = shot = { busy: true };
+  try { mine.url = await shrink(file); } catch (e) { mine.err = e.message; }
+  if (!mine.err && !aiCfg().key) mine.nokey = true;
+  if (!mine.err && !mine.nokey) {
+    if (shot === mine) drawShot();
+    try {
+      const reply = await ai(READER, [{ role: 'user', content: [imgBlock(mine.url), { type: 'text', text: 'Read this image.' }] }], 4000, 'low');
+      const from = reply.indexOf('{');
+      let out = from < 0 ? {} : null; // no JSON at all: nothing was found
+      for (let to = reply.lastIndexOf('}'); !out && to > from; to = reply.lastIndexOf('}', to - 1)) {
+        try { out = JSON.parse(reply.slice(from, to + 1)); } catch { /* chatter after the object: try a shorter slice */ }
+      }
+      if (!out) throw new SyntaxError('no JSON object in the reply');
+      mine.formulas = (Array.isArray(out.formulas) ? out.formulas : []).map(f => String(f).trim().slice(0, 200)).filter(Boolean).slice(0, 8);
+      mine.text = String(out.text || '').slice(0, 400);
+      mine.note = String(out.note || '').slice(0, 200);
+    } catch (e) { mine.err = e instanceof SyntaxError ? 'The AI reply could not be understood. Try the photo again.' : e.message; }
+  }
+  mine.busy = false;
+  if (shot !== mine) return; // another photo was chosen while waiting
+  drawShot();
+  if (!mine.err && !mine.nokey && mine.formulas.length === 1) { $('#q').value = mine.formulas[0]; submit(mine.formulas[0], mine.text); }
+}
+// A photo from the file picker, a paste or a drop goes to the page that is showing.
+function usePhoto(file, where = page === 'ai' ? 'chat' : page === 'lookup' ? 'shot' : '') {
+  if (!file || !where || (file.type && !file.type.startsWith('image/'))) return;
+  if (where === 'shot') { readPhoto(file); return; }
+  shrink(file).then(url => { chatImg = url; chatErr = ''; }, e => { chatErr = e.message; }).then(drawChat);
+}
+
+// Leaving a problem (to a formula card or the AI) records which one, so Back reopens it.
+const keepPlace = b => {
+  const pr = b.closest('.prob');
+  try { if (pr) history.replaceState(null, '', '#/problems/' + pr.id.slice(5)); } catch { /* refused on some file:// pages: Back then lands on the list */ }
+};
+// Buttons outside the lookup flow: data-ui names the handler, data-arg is its argument.
+const ui = {
+  askai(text, b) { keepPlace(b); $('#msg').value = text; location.hash = '#/ai'; },
+  pick(where) { pickFor = where; $('#file').click(); },
+  shotask() { chatImg = shot.url; location.hash = '#/ai'; },
+  shotremove() { shot = null; drawShot(); },
+  unattach() { chatImg = null; drawChat(); },
+  ptopic(t) { probTopic = t; drawProblems(); },
+  formula(id, b) { // from a problem to that formula's card on the lookup page
+    keepPlace(b);
+    const f = formulaById(id);
+    $('#q').value = f.f;
+    submit(f.f);
+    Object.assign(S, { target: { formula: id }, confirmed: true });
+    location.hash = '#/';
+    route();
+    draw();
+    $('#flow').scrollIntoView();
+  },
+  newchat() { chat = []; chatImg = null; chatBusy = false; chatErr = ''; $('#msg').value = ''; drawChat(); },
+  aisave() {
+    store.set('ai', { key: $('#aikey').value.trim() || aiCfg().key, model: $('#aimodel').value });
+    chatErr = '';
+    $('#aiset').open = !aiCfg().key;
+    drawAi();
+  },
+  aiforget() { store.set('ai', { key: '', model: $('#aimodel').value }); drawAi(); }
+};
+
 function route() {
-  const page = (location.hash.match(/^#\/(\w+)/) || [, 'lookup'])[1];
-  const target = $('#page-' + page) ? page : 'lookup';
-  for (const sec of document.querySelectorAll('main > section')) sec.hidden = sec.id !== 'page-' + target;
-  for (const a of document.querySelectorAll('nav a')) a.classList.toggle('on', a.getAttribute('href') === '#/' + (target === 'lookup' ? '' : target));
+  const [, name, arg] = location.hash.match(/^#\/(\w+)(?:\/([\w-]+))?/) || [];
+  page = $('#page-' + name) ? name : 'lookup';
+  for (const sec of document.querySelectorAll('main > section')) sec.hidden = sec.id !== 'page-' + page;
+  for (const a of document.querySelectorAll('nav a')) a.classList.toggle('on', a.getAttribute('href') === '#/' + (page === 'lookup' ? '' : page));
   $('#setup').innerHTML = $('#prof').innerHTML = ''; // one profile form at a time, or their radios share a group
-  if (target === 'table') drawTable();
-  if (target === 'history') drawHistory();
-  if (target === 'profile') $('#prof').innerHTML = profileForm();
-  if (target === 'lookup') drawSetup();
+  if (page === 'table') drawTable();
+  if (page === 'history') drawHistory();
+  if (page === 'profile') $('#prof').innerHTML = profileForm();
+  if (page === 'lookup') drawSetup();
+  if (page === 'problems') drawProblems(arg);
+  if (page === 'ai') drawAi();
 }
 
 function boot() {
@@ -483,17 +755,21 @@ function boot() {
   });
   $('#ask').addEventListener('submit', e => { e.preventDefault(); if ($('#q').value.trim()) submit($('#q').value); });
   document.addEventListener('click', e => {
-    const b = e.target.closest('[data-act],[data-key],[data-shape],[data-go]');
+    const same = e.target.closest('a[href^="#/problems/"]'); // a link to the problem already in the address: no hashchange fires
+    if (same && same.getAttribute('href') === location.hash) { route(); return; }
+    const b = e.target.closest('[data-act],[data-key],[data-shape],[data-go],[data-ui]');
     if (!b) return;
+    if (b.dataset.ui) { ui[b.dataset.ui](b.dataset.arg, b); return; }
     if (b.dataset.key) { const q = $('#q'); q.setRangeText(b.dataset.key, q.selectionStart, q.selectionEnd, 'end'); q.focus(); return; }
     if (b.dataset.shape) { $('#shape-hits').innerHTML = DB.glyphs.filter(g => g.shape === b.dataset.shape).map(glyphChip).join(''); return; }
-    if (b.dataset.go) { location.hash = '#/'; $('#q').value = b.dataset.go; submit(b.dataset.go); return; }
+    if (b.dataset.go) { location.hash = '#/'; $('#q').value = b.dataset.go; submit(b.dataset.go, b.closest('#shot') && shot ? shot.text : ''); return; }
     if (b.dataset.act === 'saveprofile') { saveProfile(); drawSetup(); return; }
     if (act[b.dataset.act](b.dataset.arg) !== 'drawn') draw();
     const last = document.querySelector('#flow .step:last-child');
     if (last) last.scrollIntoView({ block: 'nearest' });
   });
   document.addEventListener('change', e => {
+    if (e.target.id === 'aimodel') { store.set('ai', { ...aiCfg(), model: e.target.value }); return; }
     if (e.target.name === 'cur' || e.target.name === 'level') { saveProfile(e.target.closest('fieldset').parentElement); if (S.p) draw(); }
   });
   $('#copyq').addEventListener('click', e => {
@@ -504,6 +780,18 @@ function boot() {
   $('#clearh').addEventListener('click', () => {
     if (window.confirm('Clear your lookup history? Reported entries stay.')) { store.set('history', []); drawHistory(); }
   });
+  $('#chat').addEventListener('submit', e => { e.preventDefault(); sendChat(); });
+  $('#msg').addEventListener('keydown', e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); sendChat(); } });
+  $('#file').addEventListener('change', e => { usePhoto(e.target.files[0], pickFor); e.target.value = ''; });
+  document.addEventListener('paste', e => {
+    const f = [...((e.clipboardData || {}).files || [])].find(x => x.type.startsWith('image/'));
+    if (!f || e.clipboardData.getData('text')) return; // copied text sometimes carries a picture of itself
+    e.preventDefault();
+    usePhoto(f);
+  });
+  // Without these two, dropping a file anywhere makes the browser leave the site to show it.
+  document.addEventListener('dragover', e => { if ([...e.dataTransfer.types].includes('Files')) e.preventDefault(); });
+  document.addEventListener('drop', e => { if (e.dataTransfer.files.length) { e.preventDefault(); usePhoto(e.dataTransfer.files[0]); } });
   drawKeys();
   S = blank();
   window.addEventListener('hashchange', route);
